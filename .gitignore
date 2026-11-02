@@ -8,10 +8,11 @@ CLIG/tetris/tetris
 CLIG/type/type
 WP-cli/wp
 
-# Databases
+# Databases & Local User Data
 *.db
 *.db-wal
 *.db-shm
+**/todo.json
 
 # Python
 **/venv/
