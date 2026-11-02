@@ -41,27 +41,35 @@ func (c Chat) Label() string {
 	return c.JID
 }
 
+type Reaction struct {
+	Emoji   string    `json:"emoji"`
+	Reactor string    `json:"reactor,omitempty"`
+	FromMe  bool      `json:"fromMe,omitempty"`
+	At      time.Time `json:"at,omitzero"`
+}
+
 type Message struct {
-	ID         string    `json:"id"`
-	Chat       string    `json:"chat"`
-	Sender     string    `json:"sender,omitempty"`
-	FromMe     bool      `json:"fromMe"`
-	Text       string    `json:"text"`
-	Caption    string    `json:"caption,omitempty"`
-	Kind       string    `json:"kind,omitempty"`
-	Mime       string    `json:"mime,omitempty"`
-	FileName   string    `json:"fileName,omitempty"`
-	FileSize   int64     `json:"fileSize,omitempty"`
-	FilePath   string    `json:"filePath,omitempty"`
-	MediaState string    `json:"mediaState,omitempty"`
-	MediaRef   string    `json:"-"`
-	SenderName string    `json:"senderName,omitempty"`
-	ReplyTo    string    `json:"replyTo,omitempty"`
-	ReplyText  string    `json:"replyText,omitempty"`
-	Receipt    string    `json:"receipt,omitempty"`
-	Deleted    bool      `json:"deleted,omitempty"`
-	Edited     bool      `json:"edited,omitempty"`
-	At         time.Time `json:"at"`
+	ID         string     `json:"id"`
+	Chat       string     `json:"chat"`
+	Sender     string     `json:"sender,omitempty"`
+	FromMe     bool       `json:"fromMe"`
+	Text       string     `json:"text"`
+	Caption    string     `json:"caption,omitempty"`
+	Kind       string     `json:"kind,omitempty"`
+	Mime       string     `json:"mime,omitempty"`
+	FileName   string     `json:"fileName,omitempty"`
+	FileSize   int64      `json:"fileSize,omitempty"`
+	FilePath   string     `json:"filePath,omitempty"`
+	MediaState string     `json:"mediaState,omitempty"`
+	MediaRef   string     `json:"-"`
+	SenderName string     `json:"senderName,omitempty"`
+	ReplyTo    string     `json:"replyTo,omitempty"`
+	ReplyText  string     `json:"replyText,omitempty"`
+	Receipt    string     `json:"receipt,omitempty"`
+	Deleted    bool       `json:"deleted,omitempty"`
+	Edited     bool       `json:"edited,omitempty"`
+	Reactions  []Reaction `json:"reactions,omitempty"`
+	At         time.Time  `json:"at"`
 }
 
 // ListPreview is the chat-list line. A group message is prefixed with its sender.
@@ -171,6 +179,16 @@ func (s *Store) migrate() error {
 			PRIMARY KEY (chat, id)
 		);
 		CREATE INDEX IF NOT EXISTS messages_chat_at ON messages(chat, at);
+		CREATE TABLE IF NOT EXISTS reactions (
+			chat TEXT NOT NULL,
+			target_id TEXT NOT NULL,
+			reactor TEXT NOT NULL,
+			from_me INTEGER NOT NULL,
+			emoji TEXT NOT NULL,
+			at INTEGER NOT NULL,
+			PRIMARY KEY (chat, target_id, reactor)
+		);
+		CREATE INDEX IF NOT EXISTS reactions_target ON reactions(chat, target_id);
 	`)
 	if err != nil {
 		return err
@@ -272,6 +290,9 @@ func (s *Store) Messages(jid string, limit int) ([]Message, error) {
 	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
 		out[i], out[j] = out[j], out[i]
 	}
+	if err := s.attachReactions(out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -313,6 +334,9 @@ func (s *Store) MessagesBefore(jid, beforeID string, limit int) ([]Message, erro
 	}
 	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
 		out[i], out[j] = out[j], out[i]
+	}
+	if err := s.attachReactions(out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -378,7 +402,13 @@ func (s *Store) MessagesSpan(jid, fromID, untilID string, limit int) ([]Message,
 		}
 		out = append(out, m)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := s.attachReactions(out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func messagePos(db *sql.DB, jid, id string) (int64, int64, error) {
@@ -549,6 +579,9 @@ func (s *Store) DeleteMessage(chat, id string) (Chat, bool, error) {
 	if n == 0 {
 		return Chat{}, false, tx.Commit()
 	}
+	if _, err := tx.Exec(`DELETE FROM reactions WHERE chat = ? AND target_id = ?`, jid, id); err != nil {
+		return Chat{}, false, err
+	}
 	if err := s.refreshTail(tx, jid); err != nil {
 		return Chat{}, false, err
 	}
@@ -608,6 +641,9 @@ func (s *Store) ClearChat(jid string) error {
 	if _, err := tx.Exec(`DELETE FROM messages WHERE chat = ?`, id); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`DELETE FROM reactions WHERE chat = ?`, id); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`UPDATE chats SET last_text = '', last_at = 0, unread = 0 WHERE jid = ?`, id); err != nil {
 		return err
 	}
@@ -627,6 +663,9 @@ func (s *Store) DeleteChat(jid string) error {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM messages WHERE chat = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM reactions WHERE chat = ?`, id); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM chats WHERE jid = ?`, id); err != nil {
@@ -914,6 +953,9 @@ func (s *Store) fold(tx *sql.Tx, a, b string) (string, error) {
 		if _, err := tx.Exec(`UPDATE messages SET chat = ? WHERE chat = ?`, keep, drop); err != nil {
 			return "", err
 		}
+		if _, err := tx.Exec(`UPDATE reactions SET chat = ? WHERE chat = ?`, keep, drop); err != nil {
+			return "", err
+		}
 		if _, err := tx.Exec(`UPDATE chats SET jid = ?, alt_jid = ? WHERE jid = ?`, keep, drop, drop); err != nil {
 			return "", err
 		}
@@ -924,6 +966,17 @@ func (s *Store) fold(tx *sql.Tx, a, b string) (string, error) {
 		return "", err
 	}
 	if _, err := tx.Exec(`UPDATE messages SET chat = ? WHERE chat = ?`, keep, drop); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(`
+		DELETE FROM reactions WHERE rowid IN (
+			SELECT d.rowid FROM reactions d
+			INNER JOIN reactions k ON k.chat = ? AND k.target_id = d.target_id AND k.reactor = d.reactor
+			WHERE d.chat = ?
+		)`, keep, drop); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(`UPDATE reactions SET chat = ? WHERE chat = ?`, keep, drop); err != nil {
 		return "", err
 	}
 	dropRow := br
@@ -1274,6 +1327,193 @@ func (s *Store) SetFile(chat, id, path, state string, size int64) (Message, erro
 		return Message{}, err
 	}
 	return m, nil
+}
+
+// UpsertReaction sets one person's emoji on a message. Empty emoji removes it.
+// Does not touch chat last_text, last_at, or unread.
+func (s *Store) UpsertReaction(chat, targetID, reactor string, fromMe bool, emoji string, at time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if chat == "" || targetID == "" || reactor == "" {
+		return false, fmt.Errorf("incomplete reaction")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	jid, err := s.lookup(tx, chat)
+	if err != nil {
+		return false, err
+	}
+	emoji = strings.TrimSpace(emoji)
+	if at.IsZero() {
+		at = time.Now()
+	}
+	if emoji == "" {
+		res, err := tx.Exec(`DELETE FROM reactions WHERE chat = ? AND target_id = ? AND reactor = ?`, jid, targetID, reactor)
+		if err != nil {
+			return false, err
+		}
+		n, _ := res.RowsAffected()
+		if err := tx.Commit(); err != nil {
+			return false, err
+		}
+		return n > 0, nil
+	}
+	var old string
+	err = tx.QueryRow(`SELECT emoji FROM reactions WHERE chat = ? AND target_id = ? AND reactor = ?`, jid, targetID, reactor).Scan(&old)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		if _, err := tx.Exec(`
+			INSERT INTO reactions (chat, target_id, reactor, from_me, emoji, at)
+			VALUES (?, ?, ?, ?, ?, ?)`, jid, targetID, reactor, boolInt(fromMe), emoji, at.UnixMilli()); err != nil {
+			return false, err
+		}
+		if err := tx.Commit(); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	if old == emoji {
+		return false, tx.Commit()
+	}
+	if _, err := tx.Exec(`
+		UPDATE reactions SET from_me = ?, emoji = ?, at = ?
+		WHERE chat = ? AND target_id = ? AND reactor = ?`,
+		boolInt(fromMe), emoji, at.UnixMilli(), jid, targetID, reactor); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ReactionsFor returns reactions for the given message ids in chat, oldest first per target.
+func (s *Store) ReactionsFor(chat string, ids []string) (map[string][]Reaction, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	jid, err := s.lookup(tx, chat)
+	if err != nil {
+		return nil, err
+	}
+	out, err := reactionsForTx(tx, jid, ids)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// attachReactions fills Message.Reactions. Caller must hold s.mu.
+func (s *Store) attachReactions(msgs []Message) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+	ids := make([]string, len(msgs))
+	chat := msgs[0].Chat
+	for i, m := range msgs {
+		ids[i] = m.ID
+		if m.Chat != "" {
+			chat = m.Chat
+		}
+	}
+	byID, err := reactionsForDB(s.db, chat, ids)
+	if err != nil {
+		return err
+	}
+	for i := range msgs {
+		if rs, ok := byID[msgs[i].ID]; ok {
+			msgs[i].Reactions = rs
+		}
+	}
+	return nil
+}
+
+func reactionsForTx(tx *sql.Tx, chat string, ids []string) (map[string][]Reaction, error) {
+	return queryReactions(func(q string, args ...any) (*sql.Rows, error) {
+		return tx.Query(q, args...)
+	}, chat, ids)
+}
+
+func reactionsForDB(db *sql.DB, chat string, ids []string) (map[string][]Reaction, error) {
+	return queryReactions(db.Query, chat, ids)
+}
+
+func queryReactions(query func(string, ...any) (*sql.Rows, error), chat string, ids []string) (map[string][]Reaction, error) {
+	out := map[string][]Reaction{}
+	if chat == "" || len(ids) == 0 {
+		return out, nil
+	}
+	seen := map[string]struct{}{}
+	uniq := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		uniq = append(uniq, id)
+	}
+	if len(uniq) == 0 {
+		return out, nil
+	}
+	const chunk = 200
+	for i := 0; i < len(uniq); i += chunk {
+		end := i + chunk
+		if end > len(uniq) {
+			end = len(uniq)
+		}
+		part := uniq[i:end]
+		marks := strings.Repeat("?,", len(part))
+		marks = marks[:len(marks)-1]
+		args := make([]any, 0, 1+len(part))
+		args = append(args, chat)
+		for _, id := range part {
+			args = append(args, id)
+		}
+		rows, err := query(`
+			SELECT target_id, reactor, from_me, emoji, at
+			FROM reactions
+			WHERE chat = ? AND target_id IN (`+marks+`)
+			ORDER BY at ASC, reactor ASC`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var target, reactor, emoji string
+			var fromMe int
+			var at int64
+			if err := rows.Scan(&target, &reactor, &fromMe, &emoji, &at); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out[target] = append(out[target], Reaction{
+				Emoji:   emoji,
+				Reactor: reactor,
+				FromMe:  fromMe != 0,
+				At:      time.UnixMilli(at),
+			})
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func boolInt(v bool) int {

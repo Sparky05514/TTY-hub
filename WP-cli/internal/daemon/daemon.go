@@ -358,6 +358,8 @@ func (d *Daemon) handle(req ipc.Request) ipc.Response {
 		return d.presence(req.Query, req.Text)
 	case "revoke":
 		return d.revoke(req.Query, req.Text)
+	case "react":
+		return d.react(req.Query, req.Text, req.Reply)
 	case "send":
 		return d.send(req)
 	case "find":
@@ -900,6 +902,10 @@ func (d *Daemon) onMessage(v *events.Message) {
 	if v == nil || !direct.Allowed(v.Info.Chat) {
 		return
 	}
+	if v.Message != nil && v.Message.GetReactionMessage() != nil {
+		d.onReaction(v)
+		return
+	}
 	if v.Info.Edit == types.EditAttributeSenderRevoke || v.Info.Edit == types.EditAttributeAdminRevoke {
 		d.tombstone(v.Info.Chat, v.Info.ID, v.Info.IsFromMe, true)
 		return
@@ -1121,11 +1127,14 @@ func (d *Daemon) onHistory(v *events.HistorySync) {
 				}
 			}
 		}
+		own := ownJID(d.client)
 		for _, hm := range conv.GetMessages() {
-			parsed, err := d.client.ParseWebMessage(jid, hm.GetMessage())
+			web := hm.GetMessage()
+			parsed, err := d.client.ParseWebMessage(jid, web)
 			if err != nil || parsed == nil || !direct.Allowed(parsed.Info.Chat) {
 				continue
 			}
+			applyHistoryReactions(d.app, jid.String(), own, web)
 			text, att, quote := msgtext.Inspect(parsed.Message, parsed.IsViewOnce)
 			if text == "" {
 				continue

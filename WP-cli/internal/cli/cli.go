@@ -17,6 +17,7 @@ import (
 	"wp/internal/daemon"
 	"wp/internal/ipc"
 	"wp/internal/paths"
+	"wp/internal/store"
 	"wp/internal/tui"
 )
 
@@ -38,6 +39,8 @@ func Main(args []string) int {
 		return cmdRead(args[1:])
 	case "send":
 		return cmdSend(args[1:])
+	case "react":
+		return cmdReact(args[1:])
 	case "find":
 		return cmdFind(args[1:])
 	case "watch":
@@ -191,7 +194,52 @@ func cmdRead(args []string) int {
 		if m.Caption != "" {
 			fmt.Printf("%-12s  %-12s  %s\n", "", "", m.Caption)
 		}
+		if s := formatReactions(m.Reactions); s != "" {
+			fmt.Printf("%-12s  %-12s  %s\n", "", "", s)
+		}
 	}
+	return 0
+}
+
+func cmdReact(args []string) int {
+	fs := flag.NewFlagSet("react", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	clear := fs.Bool("clear", false, "remove your reaction")
+	asJSON := fs.Bool("json", false, "print JSON")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	rest := fs.Args()
+	if len(rest) < 2 {
+		usage(os.Stderr)
+		return 2
+	}
+	chat := rest[0]
+	msgID := rest[1]
+	emoji := ""
+	if !*clear {
+		if len(rest) < 3 {
+			usage(os.Stderr)
+			return 2
+		}
+		emoji = strings.Join(rest[2:], " ")
+	}
+	resp, err := roundTrip(ipc.Request{Cmd: "react", Query: chat, Text: msgID, Reply: emoji})
+	if err != nil {
+		return callErr(err, *asJSON)
+	}
+	if *asJSON {
+		return printJSON(resp)
+	}
+	if !resp.OK {
+		fmt.Fprintln(os.Stderr, resp.Error)
+		return 1
+	}
+	if emoji == "" {
+		fmt.Println("cleared")
+		return 0
+	}
+	fmt.Printf("reacted %s\n", emoji)
 	return 0
 }
 
@@ -490,6 +538,44 @@ func yesNo(v bool) string {
 	return "no"
 }
 
+func formatReactions(rs []store.Reaction) string {
+	if len(rs) == 0 {
+		return ""
+	}
+	type agg struct {
+		emoji string
+		n     int
+		mine  bool
+	}
+	order := make([]string, 0, len(rs))
+	by := map[string]*agg{}
+	for _, r := range rs {
+		a, ok := by[r.Emoji]
+		if !ok {
+			a = &agg{emoji: r.Emoji}
+			by[r.Emoji] = a
+			order = append(order, r.Emoji)
+		}
+		a.n++
+		if r.FromMe {
+			a.mine = true
+		}
+	}
+	parts := make([]string, 0, len(order))
+	for _, e := range order {
+		a := by[e]
+		s := a.emoji
+		if a.n > 1 {
+			s = fmt.Sprintf("%s×%d", a.emoji, a.n)
+		}
+		if a.mine {
+			s += "*"
+		}
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, "  ")
+}
+
 func usage(w io.Writer) {
 	fmt.Fprintf(w, `wp is a direct-message client for one linked WhatsApp account.
 
@@ -500,6 +586,8 @@ func usage(w io.Writer) {
   wp read CHAT [-n N] [--json]
   wp send CHAT MESSAGE...
   wp send CHAT --file PATH [CAPTION...]
+  wp react CHAT MSGID EMOJI
+  wp react CHAT MSGID --clear
   wp find TEXT [-n N] [--json]
   wp watch [--json]
   wp logout
@@ -508,7 +596,7 @@ CHAT is a name, a phone number with country code, or a WhatsApp id.
 wp send treats the longest matching name as the chat, so multi-word names
 do not need quotes.
 
-The session is stored in ~/.local/share/wp. Groups, channels, status broadcasts,
+The session is stored in ~/.local/share/wp. Channels, status broadcasts,
 and bots are ignored. WhatsApp can unlink or ban a number that uses an unofficial client.
 
 `)

@@ -158,6 +158,33 @@ func TestThreadShowsQuoteAndReceipt(t *testing.T) {
 	}
 }
 
+func TestThreadShowsReactions(t *testing.T) {
+	when := time.Date(2026, 11, 1, 14, 2, 0, 0, time.Local)
+	msgs := []store.Message{{
+		ID: "a", Text: "hi", At: when,
+		Reactions: []store.Reaction{
+			{Emoji: "👍", Reactor: "a@lid", At: when},
+			{Emoji: "👍", Reactor: "b@lid", At: when.Add(time.Second)},
+			{Emoji: "❤️", Reactor: "me@lid", FromMe: true, At: when.Add(2 * time.Second)},
+		},
+	}}
+	var react string
+	var mine bool
+	for _, ln := range threadBody(msgs, "Ada", 40, false) {
+		if ln.React {
+			react = ln.Text
+			mine = ln.MineReact
+		}
+	}
+	if react != "👍 2  ❤️" || !mine {
+		t.Fatalf("react %q mine=%v", react, mine)
+	}
+	line, mineAny := reactionLine(nil)
+	if line != "" || mineAny {
+		t.Fatalf("empty = %q %v", line, mineAny)
+	}
+}
+
 func TestRowPlainFillsWidth(t *testing.T) {
 	got := rowPlain("Ada Lovelace", "14:02 2", 24)
 	if len([]rune(got)) != 24 || !strings.HasSuffix(got, "14:02 2") {
@@ -549,15 +576,41 @@ func TestNoticeClearsOnTheNextKey(t *testing.T) {
 	m.status = &ipc.Status{Linked: true, Connected: true}
 	m.chats = []store.Chat{{JID: "1@lid", Name: "Ada"}}
 	m.openJID = "1@lid"
-	m.messages = []store.Message{{ID: "a", Text: "hello"}}
+	m.focus = focusThread
+	m.messages = []store.Message{{ID: "a", Text: "photo", Kind: "image"}}
 	m.msgCursor = 0
-	got, _ := m.onKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
-	if got.(model).notice != "no file" {
+	got, _ := m.onKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if got.(model).notice != "opening…" {
 		t.Fatalf("notice = %q", got.(model).notice)
 	}
 	got, _ = got.(model).onKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	if got.(model).notice != "" {
 		t.Fatalf("notice stayed %q", got.(model).notice)
+	}
+}
+
+func TestEnterOpensOrWrites(t *testing.T) {
+	m := newModel()
+	m.status = &ipc.Status{Linked: true, Connected: true}
+	m.openJID = "1@lid"
+	m.focus = focusThread
+	m.messages = []store.Message{{ID: "a", Text: "hello"}}
+	m.msgCursor = 0
+	got, _ := m.onKey(tea.KeyMsg{Type: tea.KeyEnter})
+	next := got.(model)
+	if next.focus != focusInput || next.notice != "" {
+		t.Fatalf("text enter focus %v notice %q", next.focus, next.notice)
+	}
+	m = newModel()
+	m.status = &ipc.Status{Linked: true, Connected: true}
+	m.openJID = "1@lid"
+	m.focus = focusThread
+	m.messages = []store.Message{{ID: "a", Text: "photo", Kind: "image"}}
+	m.msgCursor = 0
+	got, cmd := m.onKey(tea.KeyMsg{Type: tea.KeyEnter})
+	next = got.(model)
+	if next.focus != focusThread || next.notice != "opening…" || cmd == nil {
+		t.Fatalf("media enter focus %v notice %q cmd %v", next.focus, next.notice, cmd != nil)
 	}
 }
 
@@ -663,8 +716,9 @@ func TestThreadLayout(t *testing.T) {
 	if !strings.Contains(painted, mine) || !strings.HasPrefix(painted, " ") || lipgloss.Width(painted) != 20 {
 		t.Fatalf("aligned %q width %d", painted, lipgloss.Width(painted))
 	}
+	lipgloss.SetColorProfile(termenv.ANSI)
 	top, _ := m.paintChat(store.Chat{JID: "1@lid", Name: "Ada"}, false, false, 30)
-	if !strings.Contains(top, "A") {
+	if !strings.Contains(top, styleAccent.Render("Ada")) {
 		t.Fatalf("row = %q", top)
 	}
 	if dayLabel(time.Now()) != "today" {
@@ -724,14 +778,21 @@ func TestDeletedEditedTypingAndArrivals(t *testing.T) {
 }
 
 func TestGroupRowIsMarked(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.ANSI)
 	m := newModel()
 	top, _ := m.paintChat(store.Chat{JID: "1@g.us", Name: "Family", LastText: "hi"}, false, false, 40)
 	if !strings.Contains(top, "group") {
 		t.Fatalf("row = %q", top)
 	}
+	if !strings.Contains(top, styleGroup.Render("Family")) {
+		t.Fatalf("group name not colored: %q", top)
+	}
 	plain, _ := m.paintChat(store.Chat{JID: "1@lid", Name: "Ada", LastText: "hi"}, false, false, 40)
 	if strings.Contains(plain, "group") {
 		t.Fatalf("direct row = %q", plain)
+	}
+	if !strings.Contains(plain, styleAccent.Render("Ada")) {
+		t.Fatalf("contact name not colored: %q", plain)
 	}
 }
 

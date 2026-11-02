@@ -5,8 +5,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -21,6 +19,7 @@ import (
 var (
 	styleAccent    = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
 	styleAccentEm  = lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Italic(true)
+	styleGroup     = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
 	styleMedia     = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 	styleSent      = lipgloss.NewStyle().Faint(true)
 	styleDelivered = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
@@ -76,6 +75,7 @@ type model struct {
 	pickCursor   int
 	pickStart    int
 	help         bool
+	reactPick    bool
 
 	events       <-chan ipc.Live
 	watchPending bool
@@ -276,6 +276,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.notice = msg.err.Error()
 		return m, nil
+	case reactDoneMsg:
+		if msg.jid == m.openJID {
+			for i := range m.messages {
+				if m.messages[i].ID == msg.id {
+					m.messages[i].Reactions = msg.reactions
+					if m.messages[i].Reactions == nil {
+						m.messages[i].Reactions = []store.Reaction{}
+					}
+					break
+				}
+			}
+		}
+		return m, nil
 	case newlineMsg:
 		if m.focus != focusInput {
 			return m, nil
@@ -293,6 +306,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+var reactChoices = []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}
+
 func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
@@ -303,6 +318,9 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.quit()
 		}
 		return m, nil
+	}
+	if m.reactPick {
+		return m.onReactPick(msg)
 	}
 	m.notice = ""
 	if m.find {
@@ -349,9 +367,9 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		cmd := m.armReply()
 		return m, cmd
-	case "o":
-		cmd := m.openSelected()
-		return m, cmd
+	case "e":
+		m.beginReact()
+		return m, nil
 	case "a":
 		m.startPick()
 		return m, nil
@@ -395,6 +413,9 @@ func (m model) onThread(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgdown", "ctrl+d":
 		return m, m.moveMsg(m.threadHeight() / 2)
 	case "enter":
+		if m.canOpenSelected() {
+			return m, m.openSelected()
+		}
 		return m, m.insert()
 	case "'":
 		m.jumpQuote()
@@ -402,9 +423,9 @@ func (m model) onThread(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		cmd := m.armReply()
 		return m, cmd
-	case "o":
-		cmd := m.openSelected()
-		return m, cmd
+	case "e":
+		m.beginReact()
+		return m, nil
 	case "a":
 		m.startPick()
 		return m, nil
@@ -902,6 +923,20 @@ func (m *model) onLive(ev ipc.Live) tea.Cmd {
 		m.theirAt = time.Now()
 		return nil
 	}
+	if ev.Kind == "reaction" {
+		if ev.Chat == m.openJID && ev.ID != "" {
+			for i := range m.messages {
+				if m.messages[i].ID == ev.ID {
+					m.messages[i].Reactions = ev.Reactions
+					if m.messages[i].Reactions == nil {
+						m.messages[i].Reactions = []store.Reaction{}
+					}
+					break
+				}
+			}
+		}
+		return nil
+	}
 	if ev.Refresh {
 		if ev.Chat != m.openJID {
 			return nil
@@ -1045,7 +1080,7 @@ func (m *model) patchLive(ev ipc.Live) {
 		if m.messages[i].ID != ev.ID {
 			continue
 		}
-		if ev.Kind != "" {
+		if ev.Kind != "" && ev.Kind != "reaction" {
 			m.messages[i].Kind = ev.Kind
 		}
 		if ev.Path != "" {
@@ -1469,6 +1504,17 @@ func (m model) groupChat() bool {
 	return strings.HasSuffix(m.openJID, "@g.us")
 }
 
+func (m model) canOpenSelected() bool {
+	msg, ok := m.selected()
+	if !ok {
+		return false
+	}
+	if strings.HasPrefix(msg.Text, "view once") {
+		return true
+	}
+	return msg.Kind != "" || msg.FilePath != ""
+}
+
 func (m *model) openSelected() tea.Cmd {
 	if m.openJID == "" {
 		m.notice = "select a chat"
@@ -1501,6 +1547,82 @@ func (m *model) armReply() tea.Cmd {
 	m.replyText = oneLine(msg.Preview())
 	m.focus = focusInput
 	return m.input.Focus()
+}
+
+func (m *model) beginReact() {
+	if m.openJID == "" {
+		m.notice = "select a chat"
+		return
+	}
+	if _, ok := m.selected(); !ok {
+		m.notice = "no message"
+		return
+	}
+	m.reactPick = true
+	parts := make([]string, 0, len(reactChoices))
+	for i, e := range reactChoices {
+		parts = append(parts, fmt.Sprintf("%d %s", i+1, e))
+	}
+	m.notice = strings.Join(parts, "  ")
+}
+
+func (m model) onReactPick(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		m.reactPick = false
+		m.notice = ""
+		return m, nil
+	case "1", "2", "3", "4", "5", "6":
+		i := int(msg.String()[0] - '1')
+		if i < 0 || i >= len(reactChoices) {
+			return m, nil
+		}
+		emoji := reactChoices[i]
+		m.reactPick = false
+		m.notice = ""
+		return m, m.sendReact(emoji)
+	default:
+		return m, nil
+	}
+}
+
+func (m *model) sendReact(emoji string) tea.Cmd {
+	msg, ok := m.selected()
+	if !ok || m.openJID == "" {
+		m.notice = "no message"
+		return nil
+	}
+	jid, id := m.openJID, msg.ID
+	mine := ""
+	for _, r := range msg.Reactions {
+		if r.FromMe {
+			mine = r.Emoji
+			break
+		}
+	}
+	if mine != "" && mine == emoji {
+		emoji = ""
+	}
+	return func() tea.Msg {
+		resp, err := call(ipc.Request{Cmd: "react", Query: jid, Text: id, Reply: emoji})
+		if err != nil {
+			return errMsg{err}
+		}
+		if !resp.OK {
+			return errMsg{fmt.Errorf("%s", resp.Error)}
+		}
+		list := []store.Reaction{}
+		if len(resp.Messages) > 0 {
+			list = resp.Messages[0].Reactions
+		}
+		return reactDoneMsg{jid: jid, id: id, reactions: list}
+	}
+}
+
+type reactDoneMsg struct {
+	jid       string
+	id        string
+	reactions []store.Reaction
 }
 
 func openMedia(jid, id string) tea.Cmd {
@@ -1836,11 +1958,7 @@ func (m model) paintChat(c store.Chat, selected, focused bool, w int) (string, s
 		}
 		meta += fmt.Sprintf("%d", c.Unread)
 	}
-	init := rowInitial(c.Label())
 	label := c.Label() + m.rowMarks(c)
-	if init != "" {
-		label = init + " " + label
-	}
 	if selected {
 		st := styleSelectDim
 		if focused {
@@ -1861,11 +1979,7 @@ func (m model) paintChat(c store.Chat, selected, focused bool, w int) (string, s
 		}
 		rightW += len([]rune(unread))
 	}
-	prefix := 0
-	if init != "" {
-		prefix = 2
-	}
-	nameW := w - rightW - prefix
+	nameW := w - rightW
 	if rightW > 0 {
 		nameW--
 	}
@@ -1878,16 +1992,16 @@ func (m model) paintChat(c store.Chat, selected, focused bool, w int) (string, s
 		nameW = 1
 	}
 	name := trunc(c.Label(), nameW)
-	gap := w - prefix - len([]rune(name)) - len([]rune(mark)) - rightW
+	gap := w - len([]rune(name)) - len([]rune(mark)) - rightW
 	if gap < 0 {
 		gap = 0
 	}
-	var b strings.Builder
-	if init != "" {
-		b.WriteString(styleAccent.Render(init))
-		b.WriteByte(' ')
+	nameStyle := styleAccent
+	if strings.HasSuffix(c.JID, "@g.us") {
+		nameStyle = styleGroup
 	}
-	b.WriteString(name)
+	var b strings.Builder
+	b.WriteString(nameStyle.Render(name))
 	b.WriteString(styleDim.Render(mark))
 	b.WriteString(strings.Repeat(" ", gap))
 	if timeStr != "" {
@@ -1904,18 +2018,6 @@ func (m model) paintChat(c store.Chat, selected, focused bool, w int) (string, s
 		top += strings.Repeat(" ", extra)
 	}
 	return top, styleDim.Render(preview)
-}
-
-func rowInitial(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ""
-	}
-	r, _ := utf8.DecodeRuneInString(name)
-	if r == utf8.RuneError {
-		return ""
-	}
-	return string(unicode.ToUpper(r))
 }
 
 func (m model) rowMarks(c store.Chat) string {
@@ -1998,6 +2100,10 @@ func (m model) threadLines(height int) []string {
 			line = alignLine(styleDim.Render(trunc(text, w)), w, right)
 		case ln.Quote:
 			line = alignLine(styleDim.Render(trunc(text, w)), w, right)
+		case ln.React && ln.MineReact:
+			line = alignLine(styleAccent.Render(trunc(text, w)), w, right)
+		case ln.React:
+			line = alignLine(styleDim.Render(trunc(text, w)), w, right)
 		case ln.Mine && ln.Reply:
 			line = alignLine(styleAccentEm.Render(trunc(text, w)), w, right)
 		case ln.Mine:
@@ -2053,7 +2159,7 @@ func (m model) helpLines(height int) []string {
 		"g G         first and last",
 		"ctrl-u d    page",
 		"tab         switch pane",
-		"enter       write",
+		"enter       write or open file",
 		"esc         normal mode",
 		"/           find contact or message",
 		"n N         next and previous match",
@@ -2062,9 +2168,9 @@ func (m model) helpLines(height int) []string {
 		"space       pause or play voice",
 		"shift+enter newline",
 		"r           reply",
+		"e           react",
 		"y           copy message",
 		"d           delete for everyone",
-		"o           open file",
 		"a           choose a file",
 		"p           paste image",
 		"K           bindings",

@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -149,6 +150,8 @@ type threadLine struct {
 	Reply   bool
 	Day     bool
 	Deleted bool
+	React   bool
+	MineReact bool
 	Receipt string
 }
 
@@ -214,9 +217,50 @@ func threadBody(msgs []store.Message, name string, width int, group bool) []thre
 		if m.Kind == "image" && m.FilePath != "" && inlineImages() {
 			out = append(out, threadLine{Text: kittyImage(m.FilePath), Msg: i, Image: true})
 		}
+		if react, mine := reactionLine(m.Reactions); react != "" {
+			out = append(out, threadLine{Text: react, Msg: i, Mine: m.FromMe, React: true, MineReact: mine})
+		}
 		out = append(out, threadLine{Msg: -1})
 	}
 	return out
+}
+
+// reactionLine aggregates reactions as "👍 2  ❤️". mine is true when we reacted with any shown emoji.
+func reactionLine(rs []store.Reaction) (string, bool) {
+	if len(rs) == 0 {
+		return "", false
+	}
+	type agg struct {
+		emoji string
+		n     int
+		mine  bool
+	}
+	order := make([]string, 0, len(rs))
+	by := map[string]*agg{}
+	mineAny := false
+	for _, r := range rs {
+		a, ok := by[r.Emoji]
+		if !ok {
+			a = &agg{emoji: r.Emoji}
+			by[r.Emoji] = a
+			order = append(order, r.Emoji)
+		}
+		a.n++
+		if r.FromMe {
+			a.mine = true
+			mineAny = true
+		}
+	}
+	parts := make([]string, 0, len(order))
+	for _, e := range order {
+		a := by[e]
+		if a.n > 1 {
+			parts = append(parts, fmt.Sprintf("%s %d", a.emoji, a.n))
+		} else {
+			parts = append(parts, a.emoji)
+		}
+	}
+	return strings.Join(parts, "  "), mineAny
 }
 
 // mediaLabelLine reports whether a body line is a file label rather than a caption or sentence.

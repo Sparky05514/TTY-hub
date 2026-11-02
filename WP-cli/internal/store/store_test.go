@@ -515,6 +515,109 @@ func TestMediaFileRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUpsertReaction(t *testing.T) {
+	s := openTest(t)
+	at := time.Date(2026, 11, 1, 18, 0, 0, 0, time.UTC)
+	if _, _, err := s.SaveLive(Incoming{Message: Message{
+		ID: "m1", Chat: "123@lid", Text: "hi", At: at,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	chat, _, err := s.Chat("123@lid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := chat.LastText
+
+	changed, err := s.UpsertReaction("123@lid", "m1", "456@lid", false, "👍", at)
+	if err != nil || !changed {
+		t.Fatalf("upsert = %v changed=%v", err, changed)
+	}
+	changed, err = s.UpsertReaction("123@lid", "m1", "456@lid", false, "👍", at)
+	if err != nil || changed {
+		t.Fatalf("duplicate = %v changed=%v", err, changed)
+	}
+	changed, err = s.UpsertReaction("123@lid", "m1", "456@lid", false, "❤️", at.Add(time.Second))
+	if err != nil || !changed {
+		t.Fatalf("replace = %v changed=%v", err, changed)
+	}
+	if _, err := s.UpsertReaction("123@lid", "m1", ownTestReactor, true, "😂", at.Add(2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	msgs, err := s.Messages("123@lid", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || len(msgs[0].Reactions) != 2 {
+		t.Fatalf("messages = %+v", msgs)
+	}
+	if msgs[0].Reactions[0].Emoji != "❤️" || msgs[0].Reactions[1].Emoji != "😂" {
+		t.Fatalf("order = %+v", msgs[0].Reactions)
+	}
+	if !msgs[0].Reactions[1].FromMe {
+		t.Fatalf("fromMe = %+v", msgs[0].Reactions[1])
+	}
+
+	changed, err = s.UpsertReaction("123@lid", "m1", "456@lid", false, "", at)
+	if err != nil || !changed {
+		t.Fatalf("clear = %v changed=%v", err, changed)
+	}
+	byID, err := s.ReactionsFor("123@lid", []string{"m1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byID["m1"]) != 1 || byID["m1"][0].Emoji != "😂" {
+		t.Fatalf("after clear = %+v", byID["m1"])
+	}
+
+	chat, _, err = s.Chat("123@lid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chat.LastText != last || chat.Unread != 0 {
+		t.Fatalf("chat mutated: %+v", chat)
+	}
+}
+
+func TestReactionFold(t *testing.T) {
+	s := openTest(t)
+	at := time.Date(2026, 11, 1, 18, 0, 0, 0, time.UTC)
+	if _, _, err := s.SaveLive(Incoming{
+		Message: Message{ID: "m1", Chat: "123@lid", Text: "hi", At: at},
+		AltJID:  "15551212000@s.whatsapp.net",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpsertReaction("123@lid", "m1", "456@lid", false, "👍", at); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.SaveLive(Incoming{
+		Message: Message{ID: "m2", Chat: "15551212000@s.whatsapp.net", Text: "yo", At: at.Add(time.Minute)},
+		AltJID:  "123@lid",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := s.Messages("123@lid", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, m := range msgs {
+		if m.ID == "m1" {
+			found = true
+			if len(m.Reactions) != 1 || m.Reactions[0].Emoji != "👍" {
+				t.Fatalf("folded reactions = %+v", m.Reactions)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("message missing after fold: %+v", msgs)
+	}
+}
+
+const ownTestReactor = "me@lid"
+
 func openTest(t *testing.T) *Store {
 	t.Helper()
 	s, err := Open(filepath.Join(t.TempDir(), "messages.db"))

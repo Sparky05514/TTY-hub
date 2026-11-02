@@ -39,17 +39,18 @@ type Response struct {
 }
 
 type Live struct {
-	ID       string    `json:"id,omitempty"`
-	Chat     string    `json:"chat"`
-	Name     string    `json:"name"`
-	FromMe   bool      `json:"fromMe"`
-	Text     string    `json:"text"`
-	At       time.Time `json:"at"`
-	Receipt  string    `json:"receipt,omitempty"`
-	Refresh  bool      `json:"refresh,omitempty"`
-	Kind     string    `json:"kind,omitempty"`
-	Path     string    `json:"path,omitempty"`
-	Deleted  bool      `json:"deleted,omitempty"`
-	Edited   bool      `json:"edited,omitempty"`
-	Presence string    `json:"presence,omitempty"`
+	ID        string           `json:"id,omitempty"`
+	Chat      string           `json:"chat"`
+	Name      string           `json:"name"`
+	FromMe    bool             `json:"fromMe"`
+	Text      string           `json:"text"`
+	At        time.Time        `json:"at"`
+	Receipt   string           `json:"receipt,omitempty"`
+	Refresh   bool             `json:"refresh,omitempty"`
+	Kind      string           `json:"kind,omitempty"`
+	Path      string           `json:"path,omitempty"`
+	Deleted   bool             `json:"deleted,omitempty"`
+	Edited    bool             `json:"edited,omitempty"`
+	Presence  string           `json:"presence,omitempty"`
+	Reactions []store.Reaction `json:"reactions,omitempty"`
 }
