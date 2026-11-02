@@ -1,0 +1,46 @@
+[
+    {
+        "id": "btn_git_status",
+        "label": "Git Status",
+        "command": "git status",
+        "variant": "primary"
+    },
+    {
+        "id": "btn_update",
+        "label": "System Update (interactive)",
+        "command": "echo 'Updating system...' && sudo apt update",
+        "interactive": true
+    },
+    {
+        "id": "btn_ip",
+        "label": "Show IP Address",
+        "command": "ip addr | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}'"
+    },
+    {
+        "id": "btn_disk",
+        "label": "Disk Usage",
+        "command": "df -h"
+    },
+    {
+        "id": "btn_ls",
+        "label": "List Files",
+        "command": "ls -la"
+    },
+    {
+        "id": "btn_whoami",
+        "label": "Who Am I",
+        "command": "whoami"
+    },
+    {
+        "id": "btn_top",
+        "label": "Top (Interactive PROCESS)",
+        "command": "top",
+        "interactive": true
+    },
+    {
+        "id": "btn_editor",
+        "label": "Editor (Nvim)",
+        "command": "nvim",
+        "interactive": true
+    }
+]

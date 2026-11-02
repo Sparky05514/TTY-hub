@@ -1,0 +1,21 @@
+# Build Artifacts
+*.o
+launcher
+2048/2048
+mania/mania
+snake/snake
+tetris/tetris
+type/type
+
+# Python
+**/venv/
+__pycache__/
+*.pyc
+
+# OS generated files
+.DS_Store
+.Thumbs.db
+
+# Large/Generated Assets
+mania/*.mp3
+mania/*.wav

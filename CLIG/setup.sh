@@ -64,34 +64,7 @@ for lib in "${libraries[@]}"; do
     fi
 done
 
-# 3. Python & Pokete Setup
-if [ -d "pokete" ]; then
-    echo "Setting up Pokete virtual environment..."
-    PYTHON_CMD=""
-    if command -v python3 &> /dev/null; then
-        PYTHON_CMD="python3"
-    elif command -v python &> /dev/null; then
-        PYTHON_CMD="python"
-    fi
-
-    if [ -z "$PYTHON_CMD" ]; then
-        echo -e "${RED}Error: Python 3 not found.${NC}"
-        exit 1
-    fi
-
-    # Check for venv module
-    if ! $PYTHON_CMD -m venv --help &> /dev/null; then
-        echo -e "${RED}Error: python3-venv is missing.${NC}"
-        echo -e "Try: $(get_install_cmd python3-venv)"
-        exit 1
-    fi
-
-    $PYTHON_CMD -m venv pokete/venv
-    ./pokete/venv/bin/pip install scrap_engine --quiet
-    echo -e "${GREEN}Pokete virtual environment ready.${NC}"
-fi
-
-# 4. Global Build
+# 3. Global Build
 echo -e "${GREEN}Building all games and launcher...${NC}"
 
 declare -A build_status
@@ -111,16 +84,6 @@ for game in "${GAMES[@]}"; do
     fi
 done
 
-# Pokete Setup logic
-if [ -d "pokete" ]; then
-    if [ -f "pokete/pokete" ]; then
-        chmod +x pokete/pokete
-        build_status["pokete"]="READY (Script)"
-    else
-        build_status["pokete"]="MISSING SCRIPT"
-    fi
-fi
-
 # Build launcher
 echo -e "Building ${YELLOW}launcher${NC}..."
 if gcc -Wall -Wextra launcher.c -o launcher -lncurses > /dev/null 2>&1; then
@@ -131,7 +94,7 @@ fi
 
 # Summary Report
 echo -e "\n${GREEN}--- Setup Summary ---${NC}"
-for item in "${GAMES[@]}" "pokete" "launcher"; do
+for item in "${GAMES[@]}" "launcher"; do
     status=${build_status[$item]}
     case $status in
         SUCCESS|READY*) color=$GREEN ;;

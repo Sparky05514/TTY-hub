@@ -1,15 +1,15 @@
 # Build Artifacts
 *.o
-launcher
-2048/2048
-mania/mania
-snake/snake
-tetris/tetris
-type/type
+CLIG/launcher
+CLIG/2048/2048
+CLIG/mania/mania
+CLIG/snake/snake
+CLIG/tetris/tetris
+CLIG/type/type
 
 # Python
 **/venv/
-__pycache__/
+**/__pycache__/
 *.pyc
 
 # OS generated files
@@ -17,5 +17,5 @@ __pycache__/
 .Thumbs.db
 
 # Large/Generated Assets
-mania/*.mp3
-mania/*.wav
+CLIG/mania/*.mp3
+CLIG/mania/*.wav

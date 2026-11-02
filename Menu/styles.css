@@ -1,0 +1,466 @@
+/* ==========================================================================
+   5514 TTY - Modern Terminal User Interface Stylesheet
+   Theme: Native Terminal ANSI Theme (Transparent / Adaptive)
+   ========================================================================== */
+
+/* --- Global Screen Styles --- */
+Screen {
+    background: ansi_default;
+    color: ansi_default;
+    layout: vertical;
+}
+
+Header {
+    background: ansi_default;
+    color: ansi_blue;
+    dock: top;
+    height: 1;
+}
+
+Footer {
+    background: ansi_default;
+    color: ansi_bright_black;
+    dock: bottom;
+    height: 1;
+}
+
+/* --- Main Menu Container --- */
+#main_container {
+    layout: vertical;
+    align: center middle;
+    padding: 1 2;
+    height: 100%;
+    width: 100%;
+}
+
+/* --- Logo & Banner --- */
+#logo {
+    text-align: center;
+    color: ansi_cyan;
+    height: auto;
+    margin-bottom: 1;
+    width: 90%;
+    max-width: 100;
+}
+
+#sub_banner {
+    text-align: center;
+    color: ansi_bright_black;
+    margin-bottom: 1;
+    text-style: italic;
+}
+
+#main_container > #sub_banner {
+    width: 90%;
+    max-width: 100;
+}
+
+/* --- Dashboard Section --- */
+#dashboard_grid {
+    layout: grid;
+    grid-size: 3;
+    grid-gutter: 1 2;
+    height: auto;
+    width: 90%;
+    max-width: 100;
+    margin-bottom: 1;
+}
+
+.dash_card {
+    height: auto;
+    min-height: 4;
+    border: round ansi_bright_black;
+    background: ansi_default;
+    padding: 0 1;
+    text-align: center;
+    align: center middle;
+}
+
+.dash_card:hover {
+    border: round ansi_blue;
+}
+
+.dash_title {
+    text-style: bold;
+    color: ansi_bright_black;
+    text-align: center;
+}
+
+.dash_value {
+    text-style: bold;
+    color: ansi_default;
+    text-align: center;
+}
+
+#clock_val {
+    color: ansi_yellow;
+    text-style: bold;
+}
+
+#hw_val {
+    color: ansi_cyan;
+    text-style: bold;
+}
+
+#weather_val {
+    color: ansi_green;
+    text-style: bold;
+}
+
+/* --- Menu Grid Section --- */
+#menu_grid {
+    layout: grid;
+    grid-size: 2;
+    grid-gutter: 1 2;
+    height: auto;
+    width: 90%;
+    max-width: 100;
+    margin-bottom: 1;
+}
+
+.menu_btn {
+    width: 100%;
+    height: 3;
+    border: round ansi_bright_black;
+    background: ansi_default;
+    color: ansi_default;
+    text-style: bold;
+    content-align: center middle;
+    transition: background 150ms, border 150ms;
+}
+
+.menu_btn:hover {
+    border: round ansi_cyan;
+    background: ansi_black;
+}
+
+.menu_btn:focus {
+    border: round ansi_red;
+    background: ansi_black;
+    color: ansi_bright_white;
+    text-style: bold underline;
+}
+
+/* Individual Button Accents */
+#btn_stats {
+    border-left: thick ansi_cyan;
+}
+
+#btn_files {
+    border-left: thick ansi_green;
+}
+
+#btn_prod {
+    border-left: thick ansi_yellow;
+}
+
+#btn_actions {
+    border-left: thick ansi_magenta;
+}
+
+#btn_apps {
+    border-left: thick ansi_bright_yellow;
+}
+
+#btn_quit {
+    border-left: thick ansi_red;
+}
+
+/* --- Description / Context Panel --- */
+#desc_panel {
+    width: 90%;
+    max-width: 100;
+    height: 3;
+    border: round ansi_bright_black;
+    background: ansi_default;
+    color: ansi_bright_black;
+    padding: 0 1;
+    text-align: center;
+    align: center middle;
+    margin-bottom: 1;
+}
+
+/* --- System Monitor Styles --- */
+#monitor_container {
+    layout: vertical;
+    align: center top;
+    padding: 1 2;
+    height: 100%;
+}
+
+#monitor_title {
+    text-align: center;
+    color: ansi_cyan;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#monitor_metrics_grid {
+    layout: grid;
+    grid-size: 3;
+    grid-gutter: 1;
+    width: 90%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+.monitor_metric_card {
+    height: auto;
+    border: round ansi_bright_black;
+    background: ansi_default;
+    padding: 1;
+    align: center middle;
+}
+
+.stat_container {
+    height: auto;
+    margin-bottom: 1;
+    width: 100%;
+}
+
+.stat_label {
+    text-style: bold;
+    color: ansi_default;
+}
+
+ProgressBar {
+    width: 100%;
+    margin-top: 1;
+}
+
+ProgressBar > .bar--bar {
+    color: ansi_cyan;
+    background: ansi_bright_black;
+}
+
+ProgressBar > .bar--complete {
+    color: ansi_green;
+}
+
+#process_table {
+    height: 1fr;
+    width: 90%;
+    margin: 1 0;
+    border: round ansi_bright_black;
+    background: ansi_default;
+}
+
+.group_title {
+    margin-top: 1;
+    text-style: bold;
+    color: ansi_yellow;
+}
+
+.action_row {
+    height: auto;
+    align: center middle;
+    margin-top: 1;
+}
+
+.action_row > Button {
+    margin: 0 1;
+}
+
+/* --- File Commander Styles --- */
+#commander_container {
+    layout: vertical;
+    padding: 1;
+    height: 100%;
+}
+
+#commander_title {
+    text-align: center;
+    color: ansi_green;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#commander_split {
+    height: 1fr;
+    margin-bottom: 1;
+}
+
+#left_pane {
+    width: 45%;
+    height: 100%;
+    border: round ansi_bright_black;
+    background: ansi_default;
+    margin-right: 1;
+}
+
+#left_pane:focus-within {
+    border: round ansi_green;
+}
+
+#right_pane {
+    width: 55%;
+    height: 100%;
+    border: round ansi_bright_black;
+    background: ansi_default;
+    padding: 1;
+}
+
+#tree_view {
+    height: 100%;
+    background: ansi_default;
+}
+
+#file_preview {
+    color: ansi_default;
+}
+
+/* --- Productivity Styles --- */
+#prod_container {
+    layout: vertical;
+    padding: 1 2;
+    height: 100%;
+}
+
+#prod_title {
+    text-align: center;
+    color: ansi_yellow;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#prod_stats_bar {
+    text-align: center;
+    color: ansi_bright_black;
+    margin-bottom: 1;
+}
+
+#todo_input {
+    margin-bottom: 1;
+    border: round ansi_bright_black;
+    background: ansi_default;
+}
+
+#todo_input:focus {
+    border: round ansi_yellow;
+}
+
+#todo_list {
+    height: 1fr;
+    border: round ansi_bright_black;
+    background: ansi_default;
+    margin-bottom: 1;
+}
+
+#todo_list:focus {
+    border: round ansi_yellow;
+}
+
+/* --- Quick Actions Styles --- */
+#actions_container {
+    layout: vertical;
+    padding: 1;
+    height: 100%;
+}
+
+#actions_title {
+    text-align: center;
+    color: ansi_magenta;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#actions_split {
+    height: 1fr;
+    margin-bottom: 1;
+}
+
+#actions_menu {
+    width: 32;
+    height: 100%;
+    margin-right: 1;
+    border: round ansi_bright_black;
+    background: ansi_default;
+    padding: 1;
+}
+
+#actions_menu > Button {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+#log_container {
+    width: 1fr;
+    height: 100%;
+    border: round ansi_bright_black;
+    background: ansi_default;
+    padding: 0 1;
+}
+
+#command_log {
+    height: 100%;
+    background: ansi_default;
+}
+
+/* --- Apps Menu Styles --- */
+#apps_container {
+    layout: vertical;
+    align: center middle;
+    padding: 1 2;
+    height: 100%;
+}
+
+#apps_title {
+    text-align: center;
+    color: ansi_yellow;
+    text-style: bold;
+    margin-bottom: 1;
+    width: 80%;
+    max-width: 80;
+}
+
+#apps_container > #sub_banner {
+    width: 80%;
+    max-width: 80;
+}
+
+#apps_container > #desc_panel {
+    width: 80%;
+    max-width: 80;
+}
+
+#apps_grid {
+    layout: grid;
+    grid-size: 2;
+    grid-gutter: 1 2;
+    height: auto;
+    width: 80%;
+    max-width: 80;
+    margin-bottom: 1;
+}
+
+.app_btn {
+    width: 100%;
+    height: 3;
+    border: round ansi_bright_black;
+    background: ansi_default;
+    color: ansi_default;
+    text-style: bold;
+}
+
+.app_btn:hover {
+    border: round ansi_yellow;
+    background: ansi_black;
+}
+
+.app_btn:focus {
+    border: round ansi_red;
+    background: ansi_black;
+    color: ansi_bright_white;
+}
+
+/* --- Common Back & Utility Buttons --- */
+.back_btn {
+    width: 24;
+    margin-top: 1;
+    border: round ansi_bright_black;
+    background: ansi_default;
+}
+
+.back_btn:hover {
+    border: round ansi_red;
+}

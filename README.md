@@ -1,47 +1,35 @@
-# CLIg - Command Line Games
+# TTY Hub
 
-A collection of simple terminal games written in C using ncurses.
+A unified terminal workspace, control center, and CLI apps/games suite combining **5514 TTY Menu** (`Menu/`) and **CLIG** (`CLIG/`).
 
-## Projects
+## Components
 
-### 1. Tetris (`/tetris`)
-A Tetris clone featuring:
--   **Proper Mechanics**: 7-Bag Randomizer, SRS Wall Kicks, Move Reset.
--   **Controls**: WASD/Arrow Keys, Space (Hard Drop), S (Fast Soft Drop), C (Hold).
--   **Physics**: Tuned DAS (90ms) and ARR (45ms).
+### 1. `Menu/` — 5514 TTY Control Center
+A modern terminal control center built with Python and [Textual](https://textual.textualize.io/):
+- **System Stats**: Real-time CPU, RAM, disk monitors, and interactive process manager.
+- **File Commander**: Dual-pane file browser with syntax highlighting and editor integration.
+- **Productivity**: Task organizer and Todo manager with keyboard shortcuts.
+- **Quick Actions**: Configurable terminal commands and interactive runner.
+- **Apps**: Integrated launcher for terminal apps and games (**WP-cli**, **Snake**, **Tetris**, **2048**, **Type**).
 
-### 2. Snake (`/snake`)
-A classic Snake implementation with:
--   **Controls**: WASD / Arrow Keys.
--   **Features**: Smooth input queueing, score tracking.
-
-### 3. 2048 (`/2048`)
-A classic sliding tile puzzle game:
--   **Controls**: WASD / Arrow Keys.
--   **Features**: Score tracking, tile merging, 2048 win condition.
-
-### 4. Mania (`/mania`)
-A 4-key rhythm game (osu!mania style):
--   **Controls**: D, F, J, K.
--   **Features**: Synchronized audio with VLC, editable levels, combo/scoring system.
-
-### 5. Type (`/type`)
-A fast-paced typing game:
--   **Controls**: Keyboard letters.
--   **Features**: Words move right-to-left. Typing characters makes words disappear from right-to-left.
-
-## Build & Run
-
-Each project has its own Makefile.
-
+#### Run the Menu
 ```bash
-# Run Tetris
-cd tetris
-make
-./tetris
+cd Menu
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+./run.sh
+```
 
-# Run Snake
-cd ../snake
-make
-./snake
+### 2. `CLIG/` — Command Line Games
+A collection of terminal games written in C using `ncurses`:
+- **Snake** (`CLIG/snake`)
+- **Tetris** (`CLIG/tetris`)
+- **2048** (`CLIG/2048`)
+- **Type** (`CLIG/type`)
+
+#### Build CLIG Games
+```bash
+cd CLIG
+./setup.sh
 ```

@@ -7,7 +7,6 @@ echo 1. 2048
 echo 2. Snake
 echo 3. Tetris
 echo 4. Type
-echo 5. Pokete (Requires Python)
 echo Q. Quit
 echo.
 
@@ -17,7 +16,6 @@ if "%choice%"=="1" goto run_2048
 if "%choice%"=="2" goto run_snake
 if "%choice%"=="3" goto run_tetris
 if "%choice%"=="4" goto run_type
-if "%choice%"=="5" goto run_pokete
 if /i "%choice%"=="q" exit
 
 goto menu
@@ -66,13 +64,4 @@ if exist "type.exe" (
 cd ..
 goto menu
 
-:run_pokete
-cd pokete
-if exist "venv\Scripts\python.exe" (
-    .\venv\Scripts\python.exe main.py
-) else (
-    echo Pokete virtual environment not found.
-    pause
-)
-cd ..
-goto menu
+
