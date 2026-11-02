@@ -1,0 +1,4 @@
+/wp
+*.db
+*.db-wal
+*.db-shm

@@ -6,6 +6,12 @@ CLIG/mania/mania
 CLIG/snake/snake
 CLIG/tetris/tetris
 CLIG/type/type
+WP-cli/wp
+
+# Databases
+*.db
+*.db-wal
+*.db-shm
 
 # Python
 **/venv/

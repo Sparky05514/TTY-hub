@@ -122,15 +122,20 @@ class AppsMenu(Screen):
         self.launch_app("wp")
 
     def launch_app(self, app_name: str) -> None:
-        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../CLIG"))
-        wp_default = os.path.expanduser("~/Projects/WP-cli/wp")
-        wp_path = wp_default if os.path.exists(wp_default) else (shutil.which("wp") or wp_default)
+        tty_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        clig_path = os.path.join(tty_root, "CLIG")
+        wp_candidates = [
+            os.path.join(tty_root, "WP-cli/wp"),
+            os.path.expanduser("~/Projects/WP-cli/wp"),
+            shutil.which("wp") or "",
+        ]
+        wp_path = next((p for p in wp_candidates if p and os.path.exists(p)), wp_candidates[0])
 
         app_paths = {
-            "snake": os.path.join(base_path, "snake/snake"),
-            "tetris": os.path.join(base_path, "tetris/tetris"),
-            "2048": os.path.join(base_path, "2048/2048"),
-            "type": os.path.join(base_path, "type/type"),
+            "snake": os.path.join(clig_path, "snake/snake"),
+            "tetris": os.path.join(clig_path, "tetris/tetris"),
+            "2048": os.path.join(clig_path, "2048/2048"),
+            "type": os.path.join(clig_path, "type/type"),
             "wp": wp_path,
         }
         

@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# TTY Hub Unified Setup Script
+# Builds and prepares CLIG, WP-cli, and Menu
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+echo -e "${CYAN}=========================================${NC}"
+echo -e "${GREEN}       Starting TTY Hub Setup...         ${NC}"
+echo -e "${CYAN}=========================================${NC}"
+
+# OS Detection
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+else
+    OS=$(uname -s)
+fi
+
+get_install_cmd() {
+    case $OS in
+        ubuntu|debian|pop|mint)
+            echo "sudo apt update && sudo apt install $1"
+            ;;
+        arch|manjaro)
+            echo "sudo pacman -S $1"
+            ;;
+        fedora)
+            echo "sudo dnf install $1"
+            ;;
+        *)
+            echo "your package manager to install $1"
+            ;;
+    esac
+}
+
+# 1. Check Required Tools
+echo -e "\n${CYAN}[1/4] Checking system requirements...${NC}"
+MISSING=0
+for cmd in gcc make pkg-config go python3; do
+    if ! command -v "$cmd" &> /dev/null; then
+        echo -e "${RED}Error: '$cmd' is not installed.${NC}"
+        echo -e "Suggested command: $(get_install_cmd "$cmd")"
+        MISSING=1
+    fi
+done
+
+if [ "$MISSING" -eq 1 ]; then
+    exit 1
+fi
+
+if ! pkg-config --exists ncurses; then
+    echo -e "${YELLOW}Warning: ncurses development files not found by pkg-config.${NC}"
+    echo -e "If CLIG build fails, install ncurses: $(get_install_cmd "ncurses")"
+fi
+
+declare -A status_map
+
+# 2. Build CLIG Games & Launcher
+echo -e "\n${CYAN}[2/4] Building CLIG games & launcher...${NC}"
+GAMES=("2048" "snake" "tetris" "type")
+for game in "${GAMES[@]}"; do
+    if [ -d "CLIG/$game" ] && [ -f "CLIG/$game/Makefile" ]; then
+        echo -e "  Building ${YELLOW}CLIG/$game${NC}..."
+        if (cd "CLIG/$game" && make > /dev/null 2>&1); then
+            status_map["CLIG:$game"]="SUCCESS"
+        else
+            status_map["CLIG:$game"]="FAILED"
+        fi
+    else
+        status_map["CLIG:$game"]="MISSING"
+    fi
+done
+
+echo -e "  Building ${YELLOW}CLIG/launcher${NC}..."
+if (cd CLIG && gcc -Wall -Wextra launcher.c -o launcher -lncurses > /dev/null 2>&1); then
+    status_map["CLIG:launcher"]="SUCCESS"
+else
+    status_map["CLIG:launcher"]="FAILED"
+fi
+
+# 3. Build WP-cli
+echo -e "\n${CYAN}[3/4] Building WP-cli...${NC}"
+if [ -d "WP-cli" ] && [ -f "WP-cli/go.mod" ]; then
+    echo -e "  Compiling ${YELLOW}WP-cli/wp${NC}..."
+    if (cd WP-cli && go build -o wp ./cmd/wp); then
+        status_map["WP-cli:wp"]="SUCCESS"
+    else
+        status_map["WP-cli:wp"]="FAILED"
+    fi
+else
+    status_map["WP-cli:wp"]="MISSING"
+fi
+
+# 4. Setup Menu Python Environment
+echo -e "\n${CYAN}[4/4] Setting up Menu environment...${NC}"
+if [ -d "Menu" ] && [ -f "Menu/requirements.txt" ]; then
+    if [ ! -f "Menu/venv/bin/pip" ]; then
+        echo -e "  Creating virtual environment in ${YELLOW}Menu/venv${NC}..."
+        rm -rf Menu/venv
+        python3 -m venv Menu/venv
+    fi
+    echo -e "  Installing Python dependencies in ${YELLOW}Menu/venv${NC}..."
+    if Menu/venv/bin/pip install -q -r Menu/requirements.txt; then
+        chmod +x Menu/run.sh
+        status_map["Menu:env"]="SUCCESS"
+    else
+        status_map["Menu:env"]="FAILED"
+    fi
+else
+    status_map["Menu:env"]="MISSING"
+fi
+
+# Summary Report
+echo -e "\n${CYAN}============= Setup Summary =============${NC}"
+ITEMS=("CLIG:2048" "CLIG:snake" "CLIG:tetris" "CLIG:type" "CLIG:launcher" "WP-cli:wp" "Menu:env")
+ALL_OK=1
+for item in "${ITEMS[@]}"; do
+    st=${status_map[$item]}
+    if [ "$st" == "SUCCESS" ]; then
+        color=$GREEN
+    else
+        color=$RED
+        ALL_OK=0
+    fi
+    printf "  %-16s : [%b%-7s%b]\n" "$item" "$color" "$st" "$NC"
+done
+echo -e "${CYAN}=========================================${NC}"
+
+if [ "$ALL_OK" -eq 1 ]; then
+    echo -e "${GREEN}TTY Hub is ready!${NC} Run ${YELLOW}cd Menu && ./run.sh${NC} to launch the control center."
+else
+    echo -e "${RED}Some components failed to build. Please check the output above.${NC}"
+    exit 1
+fi
