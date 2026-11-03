@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/mdp/qrterminal/v3"
 
 	"wp/internal/store"
@@ -379,7 +380,7 @@ func listWidthFor(term int) int {
 
 func rowPlain(name, right string, width int) string {
 	right = strings.TrimSpace(right)
-	rw := len([]rune(right))
+	rw := cellWidth(right)
 	nameW := width - rw
 	if rw > 0 {
 		nameW--
@@ -388,7 +389,7 @@ func rowPlain(name, right string, width int) string {
 		nameW = 1
 	}
 	name = trunc(name, nameW)
-	gap := width - len([]rune(name)) - rw
+	gap := width - cellWidth(name) - rw
 	if gap < 0 {
 		gap = 0
 	}
@@ -421,67 +422,68 @@ func wrapPara(para string, width int) []string {
 		return []string{""}
 	}
 	var lines []string
-	var cur []rune
+	var cur string
 	flush := func() {
-		lines = append(lines, string(cur))
-		cur = nil
+		lines = append(lines, cur)
+		cur = ""
 	}
 	for _, word := range words {
-		wr := []rune(word)
-		if len(wr) > width {
-			if len(cur) > 0 {
+		ww := cellWidth(word)
+		if ww > width {
+			if cur != "" {
 				flush()
 			}
-			for len(wr) > width {
-				lines = append(lines, string(wr[:width]))
-				wr = wr[width:]
+			for cellWidth(word) > width {
+				piece := ansi.Truncate(word, width, "")
+				if piece == "" {
+					break
+				}
+				lines = append(lines, piece)
+				word = strings.TrimPrefix(word, piece)
 			}
-			cur = append([]rune(nil), wr...)
+			cur = word
 			continue
 		}
-		if len(cur) == 0 {
-			cur = wr
+		if cur == "" {
+			cur = word
 			continue
 		}
-		if len(cur)+1+len(wr) > width {
+		if cellWidth(cur)+1+ww > width {
 			flush()
-			cur = wr
+			cur = word
 			continue
 		}
-		cur = append(cur, ' ')
-		cur = append(cur, wr...)
+		cur += " " + word
 	}
-	if len(cur) > 0 {
+	if cur != "" {
 		flush()
 	}
 	return lines
 }
 
+func cellWidth(s string) int {
+	return ansi.StringWidth(s)
+}
+
 func trunc(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
 	if n < 1 {
 		return ""
 	}
-	return string(r[:n-1]) + "…"
+	return ansi.Truncate(s, n, "…")
 }
 
 func pad(s string, n int) string {
-	r := []rune(s)
-	if len(r) > n {
+	if cellWidth(s) > n {
 		return trunc(s, n)
 	}
-	return s + strings.Repeat(" ", n-len(r))
+	return s + strings.Repeat(" ", n-cellWidth(s))
 }
 
 func padLeft(s string, n int) string {
-	r := []rune(s)
-	if len(r) >= n {
+	if cellWidth(s) >= n {
 		return trunc(s, n)
 	}
-	return strings.Repeat(" ", n-len(r)) + s
+	return strings.Repeat(" ", n-cellWidth(s)) + s
 }
 
 func showClock(msgs []store.Message, i int, receipt string) bool {

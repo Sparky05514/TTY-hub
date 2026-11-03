@@ -1725,13 +1725,7 @@ func (m model) mainView() string {
 		if i < len(right) {
 			r = right[i]
 		}
-		if l == "" {
-			l = pad("", lw)
-		}
-		if r == "" {
-			r = pad("", tw)
-		}
-		fmt.Fprintf(&b, "%s%s%s\n", l, div, r)
+		fmt.Fprintf(&b, "%s%s%s\n", fitWidth(l, lw), div, fitPane(r, tw))
 	}
 	if m.typingShown() {
 		line := styleDim.Render(pad(trunc(m.theirWho+" is typing", tw), tw))
@@ -1747,7 +1741,7 @@ func (m model) mainView() string {
 		if i == len(rows)-1 {
 			left = m.statusCell(lw)
 		}
-		fmt.Fprintf(&b, "%s%s%s\n", left, div, row)
+		fmt.Fprintf(&b, "%s%s%s\n", fitWidth(left, lw), div, fitPane(row, tw))
 	}
 	return b.String()
 }
@@ -1821,13 +1815,24 @@ func cursorLine(val string, pos int) (int, int) {
 }
 
 func fitWidth(s string, w int) string {
-	if extra := w - lipgloss.Width(s); extra > 0 {
-		s += strings.Repeat(" ", extra)
+	if w < 1 {
+		return ""
 	}
 	if lipgloss.Width(s) > w {
 		return trunc(s, w)
 	}
+	if extra := w - lipgloss.Width(s); extra > 0 {
+		s += strings.Repeat(" ", extra)
+	}
 	return s
+}
+
+// fitPane pads or truncates a thread cell, leaving kitty image escapes alone.
+func fitPane(s string, w int) string {
+	if strings.Contains(s, "\x1b_G") {
+		return s
+	}
+	return fitWidth(s, w)
 }
 
 func (m model) composerText() string {
@@ -1972,12 +1977,12 @@ func (m model) paintChat(c store.Chat, selected, focused bool, w int) (string, s
 	if c.Unread > 0 {
 		unread = fmt.Sprintf("%d", c.Unread)
 	}
-	rightW := len([]rune(timeStr))
+	rightW := cellWidth(timeStr)
 	if unread != "" {
 		if timeStr != "" {
 			rightW++
 		}
-		rightW += len([]rune(unread))
+		rightW += cellWidth(unread)
 	}
 	nameW := w - rightW
 	if rightW > 0 {
@@ -1987,12 +1992,12 @@ func (m model) paintChat(c store.Chat, selected, focused bool, w int) (string, s
 		nameW = 1
 	}
 	mark := m.rowMarks(c)
-	nameW -= len([]rune(mark))
+	nameW -= cellWidth(mark)
 	if nameW < 1 {
 		nameW = 1
 	}
 	name := trunc(c.Label(), nameW)
-	gap := w - len([]rune(name)) - len([]rune(mark)) - rightW
+	gap := w - cellWidth(name) - cellWidth(mark) - rightW
 	if gap < 0 {
 		gap = 0
 	}
@@ -2013,11 +2018,7 @@ func (m model) paintChat(c store.Chat, selected, focused bool, w int) (string, s
 		}
 		b.WriteString(styleAccent.Render(unread))
 	}
-	top := b.String()
-	if extra := w - lipgloss.Width(top); extra > 0 {
-		top += strings.Repeat(" ", extra)
-	}
-	return top, styleDim.Render(preview)
+	return fitWidth(b.String(), w), styleDim.Render(preview)
 }
 
 func (m model) rowMarks(c store.Chat) string {
@@ -2214,6 +2215,9 @@ func markedText(text, mark string, markStyle, base lipgloss.Style, w int) string
 }
 
 func alignLine(rendered string, w int, right bool) string {
+	if lipgloss.Width(rendered) > w {
+		return trunc(rendered, w)
+	}
 	extra := w - lipgloss.Width(rendered)
 	if extra <= 0 {
 		return rendered
@@ -2227,7 +2231,7 @@ func alignLine(rendered string, w int, right bool) string {
 
 func centerText(s string, w int) string {
 	s = trunc(s, w)
-	extra := w - len([]rune(s))
+	extra := w - cellWidth(s)
 	if extra <= 0 {
 		return s
 	}

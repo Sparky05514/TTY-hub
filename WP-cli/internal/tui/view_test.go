@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
 	"wp/internal/ipc"
@@ -185,10 +186,24 @@ func TestThreadShowsReactions(t *testing.T) {
 	}
 }
 
+// dividerCol returns the display column of the pane divider, or -1 if missing.
+func dividerCol(line string) int {
+	plain := ansi.Strip(line)
+	idx := strings.IndexRune(plain, '│')
+	if idx < 0 {
+		return -1
+	}
+	return cellWidth(plain[:idx])
+}
+
 func TestRowPlainFillsWidth(t *testing.T) {
 	got := rowPlain("Ada Lovelace", "14:02 2", 24)
-	if len([]rune(got)) != 24 || !strings.HasSuffix(got, "14:02 2") {
-		t.Fatalf("row = %q (%d)", got, len([]rune(got)))
+	if cellWidth(got) != 24 || !strings.HasSuffix(got, "14:02 2") {
+		t.Fatalf("row = %q (%d)", got, cellWidth(got))
+	}
+	emoji := rowPlain("Ada 👋", "14:02", 24)
+	if cellWidth(emoji) != 24 {
+		t.Fatalf("emoji row = %q (%d)", emoji, cellWidth(emoji))
 	}
 }
 
@@ -200,17 +215,17 @@ func TestMainViewFitsTheTerminal(t *testing.T) {
 	m.status = &ipc.Status{Linked: true, Connected: true}
 	now := time.Now()
 	m.chats = []store.Chat{{
-		JID: "1@lid", Name: "Ada Lovelace", LastText: "look", Unread: 2, LastAt: now,
+		JID: "1@lid", Name: "Ada 👋 Lovelace", LastText: "thanks ❤️", Unread: 2, LastAt: now,
 	}}
 	m.openJID = "1@lid"
-	m.openName = "Ada Lovelace"
+	m.openName = "Ada 👋 Lovelace"
 	m.messages = []store.Message{{
 		ID: "1", Text: "image · 240 KB", Caption: "look", Kind: "image", FromMe: true, At: now,
 	}, {
-		ID: "2", Text: "hello from the other side", At: now,
+		ID: "2", Text: "hello from the other side 🎉", At: now,
 	}}
 	got := m.View()
-	if !strings.Contains(got, "Ada Lovelace") || !strings.Contains(got, "image · 240 KB") || !strings.Contains(got, "look") {
+	if !strings.Contains(got, "Ada") || !strings.Contains(got, "image · 240 KB") || !strings.Contains(got, "look") {
 		t.Fatalf("view missing content:\n%s", got)
 	}
 	if !strings.Contains(got, "connected") || strings.Contains(got, "i write") {
@@ -220,6 +235,7 @@ func TestMainViewFitsTheTerminal(t *testing.T) {
 	if len(body) < m.height-1 {
 		t.Fatalf("lines = %d", len(body))
 	}
+	divCol := -1
 	for i, line := range body {
 		if strings.Contains(line, "\x1b_G") {
 			continue
@@ -227,6 +243,18 @@ func TestMainViewFitsTheTerminal(t *testing.T) {
 		if w := lipgloss.Width(line); w != m.width {
 			t.Fatalf("line %d width = %d\n%q", i, w, line)
 		}
+		col := dividerCol(line)
+		if col < 0 {
+			continue
+		}
+		if divCol < 0 {
+			divCol = col
+		} else if col != divCol {
+			t.Fatalf("divider drifted on line %d: col %d want %d\n%q", i, col, divCol, line)
+		}
+	}
+	if divCol != m.listWidth()+1 {
+		t.Fatalf("divider col = %d, want %d", divCol, m.listWidth()+1)
 	}
 	last := body[len(body)-1]
 	if !strings.Contains(last, ">") {
