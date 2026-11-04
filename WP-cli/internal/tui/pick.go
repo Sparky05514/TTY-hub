@@ -115,6 +115,7 @@ func (m *model) sendPicked(path string) (tea.Model, tea.Cmd) {
 	m.input.SetValue("")
 	m.replyID = ""
 	m.replyText = ""
+	m.editID = ""
 	delete(m.drafts, m.openJID)
 	m.notice = "sending…"
 	return *m, tea.Batch(sendFile(m.openJID, path, caption, reply), m.pauseTyping())

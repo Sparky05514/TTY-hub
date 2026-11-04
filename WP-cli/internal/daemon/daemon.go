@@ -358,6 +358,8 @@ func (d *Daemon) handle(req ipc.Request) ipc.Response {
 		return d.presence(req.Query, req.Text)
 	case "revoke":
 		return d.revoke(req.Query, req.Text)
+	case "edit":
+		return d.edit(req.Query, req.Text, req.Reply)
 	case "react":
 		return d.react(req.Query, req.Text, req.Reply)
 	case "send":

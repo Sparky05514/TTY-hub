@@ -68,6 +68,7 @@ type model struct {
 	gen          int
 	replyID      string
 	replyText    string
+	editID       string
 	insertFrom   focus
 	pick         bool
 	pickDir      string
@@ -97,6 +98,7 @@ type draft struct {
 	text      string
 	replyID   string
 	replyText string
+	editID    string
 }
 
 type readyMsg struct{}
@@ -123,8 +125,9 @@ type findHitMsg struct {
 type sentMsg struct{ text string }
 type mediaDone struct{ err error }
 type sendFail struct {
-	text string
-	err  error
+	text   string
+	editID string
+	err    error
 }
 type errMsg struct{ err error }
 type watchMsg struct{ ch <-chan ipc.Live }
@@ -271,6 +274,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.loadThread()
 	case sendFail:
 		m.input.SetValue(msg.text)
+		m.editID = msg.editID
 		m.notice = msg.err.Error()
 		return m, m.noteCompose()
 	case errMsg:
@@ -368,6 +372,9 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmd := m.armReply()
 		return m, cmd
 	case "e":
+		cmd := m.armEdit()
+		return m, cmd
+	case "t":
 		m.beginReact()
 		return m, nil
 	case "a":
@@ -424,6 +431,9 @@ func (m model) onThread(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmd := m.armReply()
 		return m, cmd
 	case "e":
+		cmd := m.armEdit()
+		return m, cmd
+	case "t":
 		m.beginReact()
 		return m, nil
 	case "a":
@@ -482,10 +492,15 @@ func (m model) onCompose(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		raw := m.composerText()
 		reply := m.replyID
+		editID := m.editID
 		m.input.SetValue("")
 		m.replyID = ""
 		m.replyText = ""
+		m.editID = ""
 		delete(m.drafts, m.openJID)
+		if editID != "" {
+			return m, tea.Batch(edit(m.openJID, editID, raw), m.pauseTyping())
+		}
 		return m, tea.Batch(send(m.openJID, raw, reply), m.pauseTyping())
 	default:
 		var cmd tea.Cmd
@@ -793,6 +808,7 @@ func (m model) pasteImage() (tea.Model, tea.Cmd) {
 	m.input.SetValue("")
 	m.replyID = ""
 	m.replyText = ""
+	m.editID = ""
 	delete(m.drafts, jid)
 	m.notice = "sending…"
 	return m, func() tea.Msg {
@@ -845,11 +861,11 @@ func (m *model) saveDraft(jid string) {
 	if m.drafts == nil {
 		m.drafts = map[string]draft{}
 	}
-	if m.input.Value() == "" && m.replyID == "" {
+	if m.input.Value() == "" && m.replyID == "" && m.editID == "" {
 		delete(m.drafts, jid)
 		return
 	}
-	m.drafts[jid] = draft{text: m.input.Value(), replyID: m.replyID, replyText: m.replyText}
+	m.drafts[jid] = draft{text: m.input.Value(), replyID: m.replyID, replyText: m.replyText, editID: m.editID}
 }
 
 func (m *model) restoreDraft(jid string) {
@@ -860,6 +876,7 @@ func (m *model) restoreDraft(jid string) {
 	m.input.SetValue(d.text)
 	m.replyID = d.replyID
 	m.replyText = d.replyText
+	m.editID = d.editID
 }
 
 func (m *model) applyChats(chats []store.Chat) {
@@ -1156,7 +1173,7 @@ func (m model) linked() bool {
 
 func (m model) threadHeight() int {
 	h := m.height - m.composerRows()
-	if m.replyID != "" {
+	if m.replyID != "" || m.editID != "" {
 		h--
 	}
 	if m.typingShown() {
@@ -1543,8 +1560,39 @@ func (m *model) armReply() tea.Cmd {
 		m.notice = "no message"
 		return nil
 	}
+	m.editID = ""
 	m.replyID = msg.ID
 	m.replyText = oneLine(msg.Preview())
+	m.focus = focusInput
+	return m.input.Focus()
+}
+
+func (m *model) armEdit() tea.Cmd {
+	if m.openJID == "" {
+		m.notice = "select a chat"
+		return nil
+	}
+	msg, ok := m.selected()
+	if !ok {
+		m.notice = "no message"
+		return nil
+	}
+	if !msg.FromMe {
+		m.notice = "not your message"
+		return nil
+	}
+	if msg.Deleted {
+		m.notice = "already deleted"
+		return nil
+	}
+	if msg.Kind != "" {
+		m.notice = "only text messages"
+		return nil
+	}
+	m.replyID = ""
+	m.replyText = ""
+	m.editID = msg.ID
+	m.input.SetValue(msg.Text)
 	m.focus = focusInput
 	return m.input.Focus()
 }
@@ -1648,6 +1696,16 @@ func send(jid, text, reply string) tea.Cmd {
 	}
 }
 
+func edit(jid, id, text string) tea.Cmd {
+	return func() tea.Msg {
+		_, err := callWait(ipc.Request{Cmd: "edit", Query: jid, Text: id, Reply: text}, 30*time.Second)
+		if err != nil {
+			return sendFail{text: text, editID: id, err: err}
+		}
+		return sentMsg{text: text}
+	}
+}
+
 func sendFile(jid, path, caption, reply string) tea.Cmd {
 	return func() tea.Msg {
 		_, err := callWait(ipc.Request{
@@ -1731,7 +1789,10 @@ func (m model) mainView() string {
 		line := styleDim.Render(pad(trunc(m.theirWho+" is typing", tw), tw))
 		fmt.Fprintf(&b, "%s%s%s\n", pad("", lw), div, line)
 	}
-	if m.replyID != "" {
+	if m.editID != "" {
+		edit := styleDim.Render(pad(trunc("edit", tw), tw))
+		fmt.Fprintf(&b, "%s%s%s\n", pad("", lw), div, edit)
+	} else if m.replyID != "" {
 		reply := styleDim.Render(pad(trunc("reply: "+oneLine(m.replyText), tw), tw))
 		fmt.Fprintf(&b, "%s%s%s\n", pad("", lw), div, reply)
 	}
@@ -2026,7 +2087,7 @@ func (m model) rowMarks(c store.Chat) string {
 	if strings.HasSuffix(c.JID, "@g.us") {
 		b.WriteString(" group")
 	}
-	if d, ok := m.drafts[c.JID]; ok && (d.text != "" || d.replyID != "") {
+	if d, ok := m.drafts[c.JID]; ok && (d.text != "" || d.replyID != "" || d.editID != "") {
 		b.WriteString(" draft")
 	}
 	return b.String()
@@ -2169,7 +2230,8 @@ func (m model) helpLines(height int) []string {
 		"space       pause or play voice",
 		"shift+enter newline",
 		"r           reply",
-		"e           react",
+		"e           edit",
+		"t           react",
 		"y           copy message",
 		"d           delete for everyone",
 		"a           choose a file",
