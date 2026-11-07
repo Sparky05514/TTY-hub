@@ -420,10 +420,9 @@ func (m model) onThread(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgdown", "ctrl+d":
 		return m, m.moveMsg(m.threadHeight() / 2)
 	case "enter":
-		if m.canOpenSelected() {
-			return m, m.openSelected()
-		}
 		return m, m.insert()
+	case "o":
+		return m, m.openSelected()
 	case "'":
 		m.jumpQuote()
 		return m, nil
@@ -471,6 +470,13 @@ func (m model) onThread(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) onCompose(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
+		if m.editID != "" {
+			m.editID = ""
+			m.input.SetValue("")
+			if m.openJID != "" {
+				delete(m.drafts, m.openJID)
+			}
+		}
 		m.focus = m.insertFrom
 		if m.focus != focusList && m.focus != focusThread {
 			m.focus = focusThread
@@ -1521,17 +1527,6 @@ func (m model) groupChat() bool {
 	return strings.HasSuffix(m.openJID, "@g.us")
 }
 
-func (m model) canOpenSelected() bool {
-	msg, ok := m.selected()
-	if !ok {
-		return false
-	}
-	if strings.HasPrefix(msg.Text, "view once") {
-		return true
-	}
-	return msg.Kind != "" || msg.FilePath != ""
-}
-
 func (m *model) openSelected() tea.Cmd {
 	if m.openJID == "" {
 		m.notice = "select a chat"
@@ -2221,7 +2216,7 @@ func (m model) helpLines(height int) []string {
 		"g G         first and last",
 		"ctrl-u d    page",
 		"tab         switch pane",
-		"enter       write or open file",
+		"enter       write",
 		"esc         normal mode",
 		"/           find contact or message",
 		"n N         next and previous match",
@@ -2232,6 +2227,7 @@ func (m model) helpLines(height int) []string {
 		"r           reply",
 		"e           edit",
 		"t           react",
+		"o           open file",
 		"y           copy message",
 		"d           delete for everyone",
 		"a           choose a file",

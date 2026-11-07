@@ -607,7 +607,7 @@ func TestNoticeClearsOnTheNextKey(t *testing.T) {
 	m.focus = focusThread
 	m.messages = []store.Message{{ID: "a", Text: "photo", Kind: "image"}}
 	m.msgCursor = 0
-	got, _ := m.onKey(tea.KeyMsg{Type: tea.KeyEnter})
+	got, _ := m.onKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
 	if got.(model).notice != "opening…" {
 		t.Fatalf("notice = %q", got.(model).notice)
 	}
@@ -617,7 +617,7 @@ func TestNoticeClearsOnTheNextKey(t *testing.T) {
 	}
 }
 
-func TestEnterOpensOrWrites(t *testing.T) {
+func TestEnterWritesAndOOpens(t *testing.T) {
 	m := newModel()
 	m.status = &ipc.Status{Linked: true, Connected: true}
 	m.openJID = "1@lid"
@@ -635,10 +635,16 @@ func TestEnterOpensOrWrites(t *testing.T) {
 	m.focus = focusThread
 	m.messages = []store.Message{{ID: "a", Text: "photo", Kind: "image"}}
 	m.msgCursor = 0
-	got, cmd := m.onKey(tea.KeyMsg{Type: tea.KeyEnter})
+	got, _ = m.onKey(tea.KeyMsg{Type: tea.KeyEnter})
+	next = got.(model)
+	if next.focus != focusInput || next.notice != "" {
+		t.Fatalf("media enter should write focus %v notice %q", next.focus, next.notice)
+	}
+	m.focus = focusThread
+	got, cmd := m.onKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
 	next = got.(model)
 	if next.focus != focusThread || next.notice != "opening…" || cmd == nil {
-		t.Fatalf("media enter focus %v notice %q cmd %v", next.focus, next.notice, cmd != nil)
+		t.Fatalf("media o focus %v notice %q cmd %v", next.focus, next.notice, cmd != nil)
 	}
 }
 
